@@ -1,4 +1,4 @@
-# Colloquial Conversion System
+# Colloquia
 
 An advanced, production-scale English-to-Tanglish (Tamil+English colloquial) translation pipeline. The system utilizes **Retrieval-Augmented Generation (RAG)** to dynamically inject localized South Indian slang rules and colloquial phrasing templates into a massive, cloud-hosted **Llama-3.3-70B** model, followed by a local **DPO + LoRA** preference-alignment loop.
 
