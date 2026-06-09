@@ -3,21 +3,27 @@
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List
 
-import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+from dotenv import load_dotenv
+from groq import Groq
 
 from src.config import load_config
 from src.rag.retriever import SlangRetriever
 
+load_dotenv()
+
 
 TRANSLATION_SYSTEM = """You are a Tamil-English (Tanglish) colloquial translator.
-Translate the given English sentence into natural spoken Tanglish — mixing Tamil script
-with common English words the way young urban Tamilians actually talk in Chennai/Madurai.
-Avoid robotic literal translations. Keep it casual and conversational."""
+Translate the given English sentence into natural spoken Tanglish code-mixing the way young urban Tamilians actually talk in Chennai/Madurai.
+Avoid robotic literal translations. Keep it casual and conversational.
+
+CRITICAL CONSTRAINTS:
+1. Output ONLY the final Tanglish translation. Do not include any explanations, breakdowns, formatting notes, or introductory text.
+2. Write the Tanglish output using ONLY the Latin/English alphabet. Do not use Tamil script characters."""
 
 
 def build_translation_prompt(english_input: str, slang_context: str) -> str:
@@ -56,48 +62,23 @@ class MultiCandidateGenerator:
         self.top_p = gen_cfg.get("top_p", 0.9)
         self.retriever = retriever or SlangRetriever(cfg)
 
-        model_name = gen_cfg["model"]
-        load_4bit = gen_cfg.get("load_in_4bit", True)
-
-        if load_4bit:
-            quant_config = BitsAndBytesConfig(
-                load_in_4bit=True,
-                bnb_4bit_compute_dtype=torch.float16,
-                bnb_4bit_quant_type="nf4",
-            )
-            self.model = AutoModelForCausalLM.from_pretrained(
-                model_name,
-                quantization_config=quant_config,
-                device_map="auto",
-                torch_dtype=torch.float16,
-            )
-        else:
-            self.model = AutoModelForCausalLM.from_pretrained(
-                model_name,
-                device_map="auto",
-                torch_dtype=torch.float16,
-            )
-
-        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-        if self.tokenizer.pad_token is None:
-            self.tokenizer.pad_token = self.tokenizer.eos_token
+        self.model_name = gen_cfg.get("model", "llama3-70b-8192")
+        self.client = Groq()
 
     def _generate_one(self, prompt: str, temperature: float) -> str:
-        inputs = self.tokenizer(prompt, return_tensors="pt").to(self.model.device)
-        with torch.no_grad():
-            outputs = self.model.generate(
-                **inputs,
-                max_new_tokens=self.max_new_tokens,
-                do_sample=True,
+        try:
+            completion = self.client.chat.completions.create(
+                model=self.model_name,
+                messages=[
+                    {"role": "system", "content": TRANSLATION_SYSTEM},
+                    {"role": "user", "content": prompt}
+                ],
                 temperature=temperature,
-                top_p=self.top_p,
-                pad_token_id=self.tokenizer.pad_token_id,
+                max_tokens=self.max_new_tokens
             )
-        generated = self.tokenizer.decode(
-            outputs[0][inputs["input_ids"].shape[1] :],
-            skip_special_tokens=True,
-        )
-        return generated.strip().split("\n")[0].strip()
+            return completion.choices[0].message.content.strip()
+        except Exception as e:
+            return f"Error: {str(e)}"
 
     def generate(self, english_input: str) -> List[TranslationCandidate]:
         slang_context = self.retriever.format_context(english_input)
