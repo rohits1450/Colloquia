@@ -1,0 +1,48 @@
+dataset:
+  name: "roskoN/dailydialog"
+  config: "full"
+  split: "train"
+
+embeddings:
+  model: "BAAI/bge-m3"
+  batch_size: 32
+  device: "cuda"  # falls back to cpu if unavailable
+
+qdrant:
+  host: "localhost"
+  port: 6333
+  collection: "dailydialog_slang_kb"
+  vector_size: 1024  # bge-m3 dimension
+
+retrieval:
+  top_k: 5
+  score_threshold: 0.3
+
+generation:
+  # Qwen2.5-0.5B: open, no HF gate; swap to google/gemma-2-2b-it after `huggingface-cli login`
+  model: "google/gemma-2-2b-it"
+  load_in_4bit: true
+  max_new_tokens: 128
+  num_candidates: 4
+  temperature_range: [0.3, 0.7, 1.0, 1.3]
+  top_p: 0.9
+
+dpo:
+  output_dir: "./outputs/dpo-lora"
+  lora_r: 16
+  lora_alpha: 32
+  lora_dropout: 0.05
+  learning_rate: 5.0e-5
+  num_train_epochs: 1
+  per_device_train_batch_size: 1
+  gradient_accumulation_steps: 8
+  max_length: 512
+  beta: 0.1
+
+paths:
+  data_dir: "./outputs"
+  kb_metadata: "./outputs/kb_metadata.jsonl"
+  candidates: "./outputs/candidates.jsonl"
+  dpo_dataset: "./outputs/dpo_pairs.jsonl"
+  sample_io: "./outputs/sample_input_output.txt"
+  qdrant_storage: "./data/qdrant_storage"
