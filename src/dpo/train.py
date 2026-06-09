@@ -42,13 +42,15 @@ def train_dpo(
 
     dataset_path = dpo_dataset_path or paths["dpo_dataset"]
     output_dir = dpo_cfg["output_dir"]
-    model_name = gen_cfg["model"]
+    model_name = dpo_cfg.get("model", "google/gemma-2-2b-it")
+    
+    print(f"Loading local base model for DPO alignment: {model_name}")
 
     Path(output_dir).mkdir(parents=True, exist_ok=True)
 
     quant_config = BitsAndBytesConfig(
         load_in_4bit=True,
-        bnb_4bit_compute_dtype=torch.float16,
+        bnb_4bit_compute_dtype=torch.bfloat16,
         bnb_4bit_quant_type="nf4",
     )
 
@@ -56,9 +58,28 @@ def train_dpo(
         model_name,
         quantization_config=quant_config,
         device_map="auto",
-        torch_dtype=torch.float16,
+        torch_dtype=torch.bfloat16,
     )
-    model = prepare_model_for_kbit_training(model)
+    print("Applying manual low-VRAM memory optimizations for Gemma...")
+
+    # 1. Forcefully freeze all base model parameters to prevent accidental gradient tracking
+    for param in model.parameters():
+        param.requires_grad = False
+
+    # 2. Re-enable gradient tracking ONLY on the input embeddings 
+    # This is the crucial step prepare_model_for_kbit_training usually does, 
+    # but we are doing it here WITHOUT upcasting the matrix to float32!
+    if hasattr(model, "enable_input_require_grads"):
+        model.enable_input_require_grads()
+    else:
+        def make_inputs_require_grad(module, input, output):
+            output.requires_grad = True
+        model.get_input_embeddings().register_forward_hook(make_inputs_require_grad)
+
+    # 3. Enable gradient checkpointing to save massive activation memory
+    model.gradient_checkpointing_enable()
+
+    print("Gemma base parameters frozen and input gradients hooked safely in half-precision!")
 
     lora_config = LoraConfig(
         r=dpo_cfg["lora_r"],
@@ -70,38 +91,42 @@ def train_dpo(
     )
     model = get_peft_model(model, lora_config)
 
+    # CRITICAL FIX: Cast all trainable LoRA adapters to float32
+    # This prevents PyTorch's GradScaler from crashing on rogue bfloat16 gradients 
+    # inherited from Gemma's default config, while stabilizing LoRA precision!
+    for param in model.parameters():
+        if param.requires_grad:
+            param.data = param.data.to(torch.float32)
+
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
-
-    ref_model = AutoModelForCausalLM.from_pretrained(
-        model_name,
-        quantization_config=quant_config,
-        device_map="auto",
-        torch_dtype=torch.float16,
-    )
 
     train_dataset = _load_dpo_dataset(dataset_path)
 
     training_args = DPOConfig(
         output_dir=output_dir,
-        per_device_train_batch_size=dpo_cfg["per_device_train_batch_size"],
-        gradient_accumulation_steps=dpo_cfg["gradient_accumulation_steps"],
+        per_device_train_batch_size=1,
+        gradient_accumulation_steps=4,
         learning_rate=dpo_cfg["learning_rate"],
         num_train_epochs=dpo_cfg["num_train_epochs"],
         logging_steps=10,
         save_steps=100,
         beta=dpo_cfg["beta"],
-        max_length=dpo_cfg["max_length"],
         remove_unused_columns=False,
         fp16=False,
-        bf16=False,
+        bf16=True,
+        gradient_checkpointing=True,
+        optim="paged_adamw_32bit",
         report_to="none",
+        precompute_ref_log_probs=True,
+        # ─── SIZING PARAMETERS ───
+        max_length=128,
     )
 
     trainer = DPOTrainer(
         model=model,
-        ref_model=ref_model,
+        ref_model=None,
         args=training_args,
         train_dataset=train_dataset,
         processing_class=tokenizer,

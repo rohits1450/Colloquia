@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Sparkles, Copy, Database, Wand2, SlidersHorizontal, ChevronRight } from 'lucide-react';
+import { Sparkles, Copy, Database, Wand2, SlidersHorizontal, ChevronRight, Download } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 export function PlaygroundView() {
@@ -39,6 +39,30 @@ export function PlaygroundView() {
     } finally {
       setIsGenerating(false);
     }
+  };
+
+  const handleDownload = () => {
+    if (!outputs || outputs.length === 0) return;
+    
+    let content = "=== Tanglish Conversions ===\n\n";
+    outputs.forEach((item, index) => {
+      content += `[Input ${index + 1}]: ${item.input_text}\n`;
+      content += `[Variations]:\n`;
+      item.candidates.forEach((cand: any) => {
+        content += `  - Temp ${cand.temperature}: ${cand.tanglish}\n`;
+      });
+      content += "\n----------------------------------------\n\n";
+    });
+
+    const blob = new Blob([content], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `tanglish_results_${new Date().getTime()}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   };
 
   return (
@@ -129,7 +153,18 @@ export function PlaygroundView() {
 
       {/* RIGHT PANEL */}
       <div className="w-1/2 h-full flex flex-col gap-4 overflow-y-auto pb-6 pl-2">
-        <h2 className="text-lg font-semibold text-text mb-2 px-1">Outputs & Context</h2>
+        <div className="flex justify-between items-center mb-2 px-1">
+          <h2 className="text-lg font-semibold text-text">Outputs & Context</h2>
+          {showResults && outputs.length > 0 && (
+            <button 
+              onClick={handleDownload}
+              className="flex items-center gap-2 px-3 py-1.5 bg-surface border border-border hover:bg-white/5 rounded-lg text-sm text-text-muted hover:text-text transition-colors shadow-sm"
+            >
+              <Download size={14} />
+              Export .txt
+            </button>
+          )}
+        </div>
         
         {!showResults && !isGenerating ? (
           <div className="flex-1 flex flex-col items-center justify-center text-text-muted border border-dashed border-border rounded-xl bg-surface/30">

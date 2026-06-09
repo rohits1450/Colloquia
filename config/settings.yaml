@@ -26,6 +26,7 @@ generation:
   top_p: 0.9
 
 dpo:
+  model: "google/gemma-2-2b-it"
   output_dir: "./outputs/dpo-lora"
   lora_r: 16
   lora_alpha: 32

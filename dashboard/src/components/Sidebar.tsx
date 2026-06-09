@@ -21,8 +21,8 @@ export function Sidebar({ currentView, onChangeView }: SidebarProps) {
         <div className="bg-primary/20 p-2 rounded-lg text-primary">
           <Activity size={24} />
         </div>
-        <h1 className="font-bold text-lg text-text leading-tight">
-          Colloquial<br/><span className="text-primary font-black">RAG</span>
+        <h1 className="font-bold text-xl text-text leading-tight tracking-tight">
+          Colloquia<br/><span className="text-primary font-black"></span>
         </h1>
       </div>
 

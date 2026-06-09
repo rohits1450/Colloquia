@@ -141,27 +141,6 @@ Modify system hyperparameters and target endpoints inside `config/settings.yaml`
 | **generation** | `max_new_tokens` | `256` | Extended limit to prevent clipping errors |
 | **dpo** | `lora_r` | `16` | Rank target for local fine-tuning steps |
 
-## Project Structure
 
-```
-ColloquialConversionRAG/
-├── config/settings.yaml        # Complete pipeline parameters
-├── docker-compose.yml          # Qdrant engine environment configuration
-├── data/
-│   └── tamil_slang_dict.json   # Curated English-to-Slang text dictionary source
-├── src/
-│   ├── data/load_dailydialog.py
-│   ├── rag/
-│   │   ├── build_kb.py         # Dictionary mapping embedding & vector streaming
-│   │   ├── retriever.py        # LangChain similarity match query logic
-│   │   └── embeddings.py
-│   ├── generation/
-│   │   └── multi_candidate.py  # Parallelized multi-temp generation with retry logic
-│   ├── dpo/
-│   │   ├── classifier.py       # Metrics scoring backend
-│   │   ├── prepare_dataset.py  # Pair alignment generation mapping
-│   │   └── train.py            # Local DPOTrainer orchestration
-│   └── pipeline.py             # CLI application entry terminal
-└── scripts/run_pipeline.sh
 
 ```
