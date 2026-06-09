@@ -1,6 +1,6 @@
 # Colloquia
 
-An advanced, production-scale English-to-Tanglish (Tamil+English colloquial) translation pipeline. The system utilizes **Retrieval-Augmented Generation (RAG)** to dynamically inject localized South Indian slang rules and colloquial phrasing templates into a massive, cloud-hosted **Llama-3.3-70B** model, followed by a local **DPO + LoRA** preference-alignment loop.
+An advanced, production-scale English-to-Tanglish (Tamil+English colloquial) translation pipeline and interactive dashboard. The system utilizes Retrieval-Augmented Generation (RAG) to dynamically inject localized South Indian slang into a cloud-hosted Llama-3.3-70B model, seamlessly integrated with a highly optimized local DPO and LoRA preference-alignment loop.
 
 ## Architecture
 
@@ -27,6 +27,9 @@ English input ──► LangChain similarity search ◄────────�
 
 * **High-Fidelity Code-Switching:** Replaced weak, lower-parameter local models with **Llama-3.3-70B-Versatile** via Groq API, eliminating translation hallucinations, non-Tamil language bleeding, and raw metadata leakage.
 * **True Slang Mapping Base:** Upgraded the RAG index layer from plain English context match loops to a dedicated semantic lookup engine pointing to curated Tamil colloquial idioms and text slang phrases.
+* **Interactive UI Dashboard:** Built with React, Vite, and Tailwind, providing a sleek, dark-mode real-time Tanglish generation playground.
+* **FastAPI Backend Server:** Exposes scalable asynchronous translation batch endpoints flawlessly integrated with the frontend proxy.
+* **Extreme Low-VRAM DPO Optimization:** DPO training loop rigorously optimized for 4GB consumer GPUs natively using `bfloat16`, gradient checkpointing, and precomputed reference probabilities to prevent dual-pass OOM crashes.
 * **Asynchronous Multi-Threading:** Generation pipeline leverages a thread-pool executor to process bulk translation candidates in parallel, scaling system capabilities to whole multi-turn datasets.
 * **Rate-Limit Guarding:** Integrated exponential backoff wrappers to handle API transaction rates smoothly without losing data state or breaking runtime tasks.
 
@@ -141,6 +144,8 @@ Modify system hyperparameters and target endpoints inside `config/settings.yaml`
 | **generation** | `max_new_tokens` | `256` | Extended limit to prevent clipping errors |
 | **dpo** | `lora_r` | `16` | Rank target for local fine-tuning steps |
 
-
-
 ```
+
+## License
+
+This project is licensed under the [MIT License](LICENSE).
