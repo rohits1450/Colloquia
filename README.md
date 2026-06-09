@@ -144,7 +144,7 @@ Modify system hyperparameters and target endpoints inside `config/settings.yaml`
 | **generation** | `max_new_tokens` | `256` | Extended limit to prevent clipping errors |
 | **dpo** | `lora_r` | `16` | Rank target for local fine-tuning steps |
 
-```
+
 
 ## License
 
