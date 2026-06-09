@@ -1,129 +1,167 @@
-# Tanglish RAG + DPO Translation System
+# Colloquial Conversion System
 
-English-to-Tanglish (Tamil+English colloquial) translation pipeline using **RAG** for conversational context retrieval and **DPO + LoRA** for preference-aligned fine-tuning.
+An advanced, production-scale English-to-Tanglish (Tamil+English colloquial) translation pipeline. The system utilizes **Retrieval-Augmented Generation (RAG)** to dynamically inject localized South Indian slang rules and colloquial phrasing templates into a massive, cloud-hosted **Llama-3.3-70B** model, followed by a local **DPO + LoRA** preference-alignment loop.
 
 ## Architecture
 
 ```
-DailyDialog (HF) ──► BGE-M3 embeddings ──► Qdrant (offline KB)
-                                                    │
-English input ──► LangChain similarity search ◄─────┘
+Local Slang Dictionary ──► BGE-M3 embeddings ──► Qdrant Vector Store (Offline KB)
+                                                        │
+English input ──► LangChain similarity search ◄─────────┘
                          │
                          ▼
-              Prompt + retrieved slang context
+             Prompt + retrieved slang mappings
                          │
                          ▼
-              Gemma-2 (multi-temp candidates)
+        Groq API: Llama-3.3-70B (Async Multi-Candidate)
                          │
                          ▼
          Naturalness classifier (chosen vs rejected)
                          │
                          ▼
-              DPOTrainer + LoRA fine-tune
+        Local DPOTrainer + LoRA fine-tune (Gemma-2)
+
 ```
+
+## Enhancements & Modernizations
+
+* **High-Fidelity Code-Switching:** Replaced weak, lower-parameter local models with **Llama-3.3-70B-Versatile** via Groq API, eliminating translation hallucinations, non-Tamil language bleeding, and raw metadata leakage.
+* **True Slang Mapping Base:** Upgraded the RAG index layer from plain English context match loops to a dedicated semantic lookup engine pointing to curated Tamil colloquial idioms and text slang phrases.
+* **Asynchronous Multi-Threading:** Generation pipeline leverages a thread-pool executor to process bulk translation candidates in parallel, scaling system capabilities to whole multi-turn datasets.
+* **Rate-Limit Guarding:** Integrated exponential backoff wrappers to handle API transaction rates smoothly without losing data state or breaking runtime tasks.
 
 ## Prerequisites
 
-- Python 3.10+
-- Docker (for Qdrant)
-- NVIDIA GPU with 4GB+ VRAM (Gemma-2-2B in 4-bit)
-- HuggingFace account (accept Gemma-2 license)
+* Python 3.10+
+* Docker (for Qdrant Vector DB)
+* NVIDIA GPU with 4GB+ VRAM (for running local DPO training loops)
+* HuggingFace account (for storing the target fine-tuned adapter)
+* Groq Cloud Developer API Key
 
 ```bash
 huggingface-cli login
+
 ```
 
 ## Setup
 
+1. **Clone and Navigate:**
 ```bash
-cd ~/Projects/tanglish-rag-dpo
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
+git clone https://github.com/rohits1450/ColloquialConversionRAG
+cd ColloquialConversionRAG
+
+```
+
+
+
+```
+
+2. **Initialize Environment & Dependencies:**
+   ```bash
+   python -m venv .venv
+   source .venv/bin/activate
+   pip install -r requirements.txt
+   pip install groq tenacity
+
+```
+
+3. **Configure Environment Variables:**
+Create a `.env` file in the project root:
+```env
+GROQ_API_KEY=gsk_your_actual_api_key_here
+
+```
+
+
+
+```
+
+4. **Boot Infrastructure:**
+   ```bash
 docker compose up -d
+
 ```
 
 ## Pipeline Steps
 
-### 1. Build RAG Slang Knowledge Base
+### 1. Seed & Build Slang Knowledge Base
 
-Indexes DailyDialog utterances with BGE-M3 vectors into Qdrant:
+Converts the structured local dictionary mapping (`data/tamil_slang_dict.json`) into 1024-dimensional dense vectors using BGE-M3 and upserts them into Qdrant:
 
 ```bash
 python -m src.pipeline build-kb
-# optional: limit for quick test
-python -m src.pipeline build-kb --limit 500
+
 ```
 
-### 2. Multi-Candidate Generation
+### 2. Scalable Asynchronous Generation
 
-Retrieves similar conversational patterns, prompts Gemma-2 with varying temperature:
+Processes English text sources in parallel, retrieving matching lexical metadata structures and calling remote endpoints concurrently to produce multi-temperature variants:
 
 ```bash
 python -m src.pipeline generate --limit 100
+
 ```
 
-### 3. Prepare DPO Dataset
+### 3. Build DPO Preference Pairs
 
-Automated classifier ranks candidates; best = `chosen`, most robotic = `rejected`:
+Ranks translation candidate outputs automatically using a naturalness classifier, separating clean structural vernacular translations into `chosen` segments and robotic strings into `rejected` segments:
 
 ```bash
 python -m src.pipeline prepare-dpo
+
 ```
 
 ### 4. DPO + LoRA Training
 
-Fine-tunes Gemma-2 with preference pairs:
+Fine-tunes the base open-weights model locally using the generated preference files to anchor high-tier colloquial reasoning natively on-device:
 
 ```bash
 python -m src.pipeline train
+
 ```
 
-### Run Full Pipeline
+### Single Sentence Inference Mode
+
+Test individual phrases interactively via the terminal:
 
 ```bash
-bash scripts/run_pipeline.sh
-```
+python -m src.pipeline translate "Say, Jim, how about going for a few beers after dinner?"
 
-### Single Sentence Translation
-
-```bash
-python -m src.pipeline translate "How are you doing today?"
 ```
 
 ## Configuration
 
-Edit `config/settings.yaml` to change models, Qdrant settings, LoRA hyperparameters, etc.
+Modify system hyperparameters and target endpoints inside `config/settings.yaml`:
 
-| Setting | Default | Notes |
-|---------|---------|-------|
-| Embedding model | `BAAI/bge-m3` | 1024-dim dense vectors |
-| Generator | `google/gemma-2-2b-it` | 4-bit quantized for 4GB GPU |
-| Qdrant collection | `dailydialog_slang_kb` | Local, offline-capable |
-| LoRA rank | 16 | Target: q/k/v/o projections |
+| Section | Setting | Value / Target | Notes |
+| --- | --- | --- | --- |
+| **embeddings** | `model` | `BAAI/bge-m3` | 1024-dim dense cross-lingual representations |
+| **qdrant** | `collection` | `dailydialog_slang_kb` | Local isolated vector instance |
+| **generation** | `model` | `llama-3.3-70b-versatile` | Routed via Groq API cloud engine |
+| **generation** | `max_new_tokens` | `256` | Extended limit to prevent clipping errors |
+| **dpo** | `lora_r` | `16` | Rank target for local fine-tuning steps |
 
 ## Project Structure
 
 ```
-tanglish-rag-dpo/
-├── config/settings.yaml
-├── docker-compose.yml          # Qdrant
+ColloquialConversionRAG/
+├── config/settings.yaml        # Complete pipeline parameters
+├── docker-compose.yml          # Qdrant engine environment configuration
+├── data/
+│   └── tamil_slang_dict.json   # Curated English-to-Slang text dictionary source
 ├── src/
 │   ├── data/load_dailydialog.py
 │   ├── rag/
-│   │   ├── build_kb.py         # BGE-M3 → Qdrant
-│   │   ├── retriever.py        # LangChain similarity search
+│   │   ├── build_kb.py         # Dictionary mapping embedding & vector streaming
+│   │   ├── retriever.py        # LangChain similarity match query logic
 │   │   └── embeddings.py
 │   ├── generation/
-│   │   └── multi_candidate.py  # Gemma-2 multi-temp generation
+│   │   └── multi_candidate.py  # Parallelized multi-temp generation with retry logic
 │   ├── dpo/
-│   │   ├── classifier.py       # Naturalness scoring
-│   │   ├── prepare_dataset.py  # chosen/rejected pairs
-│   │   └── train.py            # DPOTrainer + LoRA
-│   └── pipeline.py             # CLI entry point
+│   │   ├── classifier.py       # Metrics scoring backend
+│   │   ├── prepare_dataset.py  # Pair alignment generation mapping
+│   │   └── train.py            # Local DPOTrainer orchestration
+│   └── pipeline.py             # CLI application entry terminal
 └── scripts/run_pipeline.sh
+
 ```
-
-## License Note
-
-DailyDialog is CC BY-NC-SA 4.0 (non-commercial). Gemma-2 has its own license terms on HuggingFace.
