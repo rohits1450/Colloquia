@@ -7,7 +7,9 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
+from tenacity import retry, stop_after_attempt, wait_random_exponential
 from dotenv import load_dotenv
 from groq import Groq
 
@@ -97,6 +99,28 @@ class MultiCandidateGenerator:
             )
         return candidates
 
+    @retry(wait=wait_random_exponential(min=1, max=60), stop=stop_after_attempt(5))
+    def _generate_one_safe(self, prompt: str, temperature: float) -> str:
+        """Wrapper with exponential backoff retry to handle Groq 429 Rate Limits."""
+        return self._generate_one(prompt, temperature)
+
+    def process_single_input(self, eng: str) -> List[dict]:
+        """Processes a single string and prepares candidate json records."""
+        slang_context = self.retriever.format_context(eng)
+        prompt = build_translation_prompt(eng, slang_context)
+        
+        records = []
+        for temp in self.temperatures:
+            # Call the safe rate-limit guarded function
+            tanglish = self._generate_one_safe(prompt, temperature=temp)
+            records.append({
+                "english": eng,
+                "tanglish": tanglish,
+                "temperature": temp,
+                "retrieved_context": slang_context,
+            })
+        return records
+
     def generate_batch_to_file(
         self,
         english_inputs: List[str],
@@ -105,16 +129,23 @@ class MultiCandidateGenerator:
         output_path = Path(output_path)
         output_path.parent.mkdir(parents=True, exist_ok=True)
         count = 0
+        
+        # Dynamic max_workers based on config
+        max_workers = self.cfg["generation"].get("max_workers", 4)
 
+        # Open file in streaming append mode
         with output_path.open("w", encoding="utf-8") as f:
-            for eng in english_inputs:
-                for cand in self.generate(eng):
-                    record = {
-                        "english": cand.english,
-                        "tanglish": cand.tanglish,
-                        "temperature": cand.temperature,
-                        "retrieved_context": cand.retrieved_context,
-                    }
-                    f.write(json.dumps(record, ensure_ascii=False) + "\n")
-                    count += 1
+            # Execute API paths in parallel threads
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                futures = {executor.submit(self.process_single_input, eng): eng for eng in english_inputs}
+                
+                for future in as_completed(futures):
+                    try:
+                        records = future.result()
+                        for record in records:
+                            f.write(json.dumps(record, ensure_ascii=False) + "\n")
+                            count += 1
+                    except Exception as e:
+                        print(f"Failed processing sentence: {str(e)}")
+                        
         return count

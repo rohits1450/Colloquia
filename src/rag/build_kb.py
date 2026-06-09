@@ -69,31 +69,33 @@ def build_knowledge_base(
         vectors_config=VectorParams(size=vector_size, distance=Distance.COSINE),
     )
 
-    utterances = extract_utterances(
-        dataset_name=ds_cfg["name"],
-        config=ds_cfg["config"],
-        split=ds_cfg["split"],
-    )
-    if limit:
-        from itertools import islice
+    slang_dict_path = Path(paths["data_dir"]) / "tamil_slang_dict.json"
 
-        utterances = islice(utterances, limit)
+    with open(slang_dict_path, "r", encoding="utf-8") as f:
+        slang_data = json.load(f)
+
+    if limit:
+        slang_data = slang_data[:limit]
 
     total = 0
     batch_size = emb_cfg["batch_size"]
 
     with metadata_path.open("w", encoding="utf-8") as meta_f:
         for batch in tqdm(
-            _batched(utterances, batch_size),
-            desc="Embedding & indexing",
+            _batched(slang_data, batch_size),
+            desc="Embedding & indexing slang dictionary",
         ):
-            texts = [u.text for u in batch]
+            # Embed the English keywords/phrases to map semantic similarity
+            texts = [item["english"] for item in batch]
             vectors = embeddings.embed_documents(texts)
             points = []
 
-            for utt, vector in zip(batch, vectors):
-                point_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, utt.id))
-                payload = _utterance_to_payload(utt)
+            for item, vector in zip(batch, vectors):
+                point_id = str(uuid.uuid4()) # Dynamic UUID generation
+                payload = {
+                    "text": item["english"],
+                    "slang_context": item["slang_context"]
+                }
                 points.append(PointStruct(id=point_id, vector=vector, payload=payload))
                 meta_f.write(json.dumps(payload, ensure_ascii=False) + "\n")
 
