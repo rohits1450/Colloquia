@@ -1,6 +1,6 @@
 # Colloquia
 
-An advanced, production-scale English-to-Tanglish (Tamil+English colloquial) translation pipeline and interactive dashboard. The system utilizes Retrieval-Augmented Generation (RAG) to dynamically inject localized South Indian slang into a cloud-hosted Llama-3.3-70B model, seamlessly integrated with a highly optimized local DPO and LoRA preference-alignment loop.
+An advanced, production-scale English-to-Tanglish (Tamil+English colloquial) translation pipeline and interactive dashboard. The system utilizes Retrieval-Augmented Generation (RAG) to dynamically inject colloquial(tamil+english) slang into a cloud-hosted Llama-3.3-70B model, seamlessly integrated with a highly optimized local DPO and LoRA preference-alignment loop.
 
 ## Architecture
 
@@ -26,8 +26,8 @@ English input ──► LangChain similarity search ◄────────�
 ## Enhancements & Modernizations
 
 * **High-Fidelity Code-Switching:** Replaced weak, lower-parameter local models with **Llama-3.3-70B-Versatile** via Groq API, eliminating translation hallucinations, non-Tamil language bleeding, and raw metadata leakage.
-* **True Slang Mapping Base:** Upgraded the RAG index layer from plain English context match loops to a dedicated semantic lookup engine pointing to curated Tamil colloquial idioms and text slang phrases.
-* **Interactive UI Dashboard:** Built with React, Vite, and Tailwind, providing a sleek, dark-mode real-time Tanglish generation playground.
+* **True Slang Mapping Base:** Upgraded the RAG index layer from plain English context match loops to a dedicated semantic lookup engine pointing to curated colloquial idioms and text slang phrases.
+* **Interactive UI Dashboard:** Built with React, Vite, and Tailwind, providing a sleek, dark-mode real-time mixed of Tamil and English generation playground.
 * **FastAPI Backend Server:** Exposes scalable asynchronous translation batch endpoints flawlessly integrated with the frontend proxy.
 * **Extreme Low-VRAM DPO Optimization:** DPO training loop rigorously optimized for 4GB consumer GPUs natively using `bfloat16`, gradient checkpointing, and precomputed reference probabilities to prevent dual-pass OOM crashes.
 * **Asynchronous Multi-Threading:** Generation pipeline leverages a thread-pool executor to process bulk translation candidates in parallel, scaling system capabilities to whole multi-turn datasets.
@@ -89,7 +89,7 @@ docker compose up -d
 
 ### 1. Seed & Build Slang Knowledge Base
 
-Converts the structured local dictionary mapping (`data/tamil_slang_dict.json`) into 1024-dimensional dense vectors using BGE-M3 and upserts them into Qdrant:
+Converts the structured local dictionary mapping into 1024-dimensional dense vectors using BGE-M3 and upserts them into Qdrant:
 
 ```bash
 python -m src.pipeline build-kb
@@ -101,7 +101,7 @@ python -m src.pipeline build-kb
 Processes English text sources in parallel, retrieving matching lexical metadata structures and calling remote endpoints concurrently to produce multi-temperature variants:
 
 ```bash
-python -m src.pipeline generate --limit 100
+python -m src.pipeline generate
 
 ```
 
