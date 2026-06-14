@@ -1,6 +1,6 @@
 # Colloquia
 
-An advanced, production-scale English-to-Tanglish (Tamil+English colloquial) translation pipeline and interactive dashboard. The system utilizes Retrieval-Augmented Generation (RAG) to dynamically inject colloquial(tamil+english) slang into a cloud-hosted Llama-3.3-70B model, seamlessly integrated with a highly optimized local DPO and LoRA preference-alignment loop.
+An advanced, production-scale English to Colloquial translation pipeline and interactive dashboard. The system utilizes Retrieval-Augmented Generation (RAG) to dynamically inject colloquial slang into a cloud-hosted Llama-3.3-70B model, seamlessly integrated with a highly optimized local DPO and LoRA preference-alignment loop.
 
 ## Architecture
 
